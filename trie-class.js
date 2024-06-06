@@ -1,116 +1,117 @@
+import { getKeyForChar } from "./convertor";
+
 class TrieNode {
     constructor() {
         this.children = {};
-        this.valuesStartingWith = [];
+        this.value = [];
+        this.cached = [];
     }
 }
 
-
-
 export default class Trie {
-    constructor() {
+    constructor(words) {
         this.root = new TrieNode();
-    }
+        words = words.map(w => w.toLowerCase());
+        const wordMap = new Map();
 
+        words.forEach(word => {
+            wordMap.set(word, (wordMap.get(word) || 0) + 1);
+        });
 
-    static getKeyForChar(char){
-        if(["a", "b", "c", "č", "ć"].includes(char)) return "2";
-        if(["d", "e", "f", "đ"].includes(char)) return "3";
-        if(["g", "h", "i"].includes(char)) return "4";
+        this.allWords = Array.from(wordMap, ([word, weight]) => ({ wordString: word, wordWeight: weight }));
+        this.allWords.forEach(word => this.insert(word))
 
-        if(["j", "k", "l"].includes(char)) return "5";
-        if(["m", "n", "o"].includes(char)) return "6";
-        if(["p", "r", "s", "š"].includes(char)) return "7";
+        this.cache();
 
-        if(["t", "u", "v"].includes(char)) return "8";
-        if(["z", "ž"].includes(char)) return "9";
-    }
-
-    insertInValuesStartingWith(node, word){
-        const exists = node.valuesStartingWith.find(wordObj => wordObj.wordString === word);
-
-        if(exists){
-            exists.wordWeight ++;
-        }
-        else{
-            node.valuesStartingWith.push({wordString: word, wordWeight: 1})
-        }
     }
 
     insert(word) {
         let current = this.root;
 
-        this.insertInValuesStartingWith(current, word);
+        for (let char of word.wordString) {
 
-        for (let char of word) {
-
-            let key = Trie.getKeyForChar(char);
+            let key = getKeyForChar(char);
 
             if (!current.children[key]) {
                 current.children[key] = new TrieNode();
             }
-
-            current = current.children[key];
-            this.insertInValuesStartingWith(current, word)
-
-        }
-
-    }
-
-    searchNormal(word) {
-        let current = this.root;
-        for (let char of word) {
-
-            let key = Trie.getKeyForChar(char);
-
-            if (!current.children[key]) {
-                return [false, null];
-            }
             current = current.children[key];
         }
-        return current.valuesStartingWith
+
+        current.value.push(word)
     }
 
-    searchT9(keys) {
+    getNode(keys) {
         let current = this.root;
         for (let key of keys) {
 
             if (!current.children[key]) {
-                return [false, null];
+                return null;
             }
             current = current.children[key];
         }
-        return current.valuesStartingWith
+        return current
     }
 
-    startsWithNormal(prefix) {
-        let current = this.root;
-        for (let char of prefix) {
-
-            let key = Trie.getKeyForChar(char);
-
-            if (!current.children[key]) {
-                return [];
-            }
-            current = current.children[key];
-        }
-
-        return current.valuesStartingWith.filter(wordObj => wordObj.wordString.startsWith(prefix));
+    getNodeFromAlpha(word){
+        return this.getNode(word.split("").map(letter => getKeyForChar(letter)).join())
     }
 
-    startsWithT9(keys) {
+    startsWithAlpha(prefix) {
+        return this.startsWithT9(prefix.split("").map(letter => getKeyForChar(letter)).join())
+    }
 
-        let current = this.root;
+    getAllWordsForNode(node, arr = []) {
 
-        for (let key of keys) {
+        arr.push(...node.value)
 
-            if (!current.children[key]) {
-                return [];
-            }
-            current = current.children[key];
+        for (let key in node.children) {
+            this.getAllWordsForNode(node.children[key], arr);
         }
 
-        return current.valuesStartingWith;
+        return arr;
+    }
+
+    startsWithT9(keys, enableCache = true) {
+        const node = this.getNode(keys);
+
+        if(enableCache && keys.length <= 2) {
+            return node.cached;
+        };
+
+        return this.getAllWordsForNode(node);
+    }
+
+    cacheSingleNode(keys){
+
+        if(keys.length > 2) return;
+
+        let node = this.getNode(keys)
+        let wordsStartingWith = this.startsWithT9(keys, false);
+
+        const filtered = wordsStartingWith.filter(word => word.wordString.length === keys.length)
+        const other = wordsStartingWith.filter(word => word.wordString.length !== keys.length)
+
+        filtered.sort((a, b) => b.wordWeight - a.wordWeight);
+        other.sort((a, b) => b.wordWeight - a.wordWeight);
+
+        const all = [...filtered, ...other].slice(0, 20);
+
+        node.cached = all;
+    }
+
+    cache(){
+
+        this.root.cached = this.allWords;
+
+        for(let i = 2; i <=9; i++){
+
+            this.cacheSingleNode("" + i)
+
+            for(let j = 2; j <=9; j++){
+                this.cacheSingleNode(""+ i + j)
+            }
+        }
     }
 
 }
