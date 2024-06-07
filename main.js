@@ -93,7 +93,7 @@ function handleKeyPress(key){
 
 }
 
-function typeKey(key){
+async function typeKey(key){
 
     if(!"123456789".includes(key)){
         return
@@ -102,7 +102,10 @@ function typeKey(key){
     // When user press new key it is signal to paste old letter
     if(currentKey !== key && currentLetter) {
         if(timeout) clearTimeout(timeout)
-        sendPasteSignal(currentLetter, currentLetterLength)
+
+        await sendPasteSignal(currentLetter, currentLetterLength + 1),
+        await sendPasteSignal(key, 1, true),
+
         currentLetterIndex = 0;
         currentLetterLength = 0;
     }
@@ -152,26 +155,29 @@ function checkDict(key){
 
 }
 
-function sendPasteSignal(word, length){
+function sendPasteSignal(word, length, skipDeleting = false){
+    return new Promise(res => {
 
-    if(length === 0){
-        length = keyMap[currentKey].length;
-    }
+        if(length === 0){
+            length = keyMap[currentKey].length;
+        }
 
-    if(!length) length = word.length;
+        if(!length) length = word.length;
 
 
-    pasteInProgress = true;
-    const pasteProcess = spawn(pythonProgramName, ["paste.py", word, config.pasteInsteadOfTyping, length]);
+        pasteInProgress = true;
+        const pasteProcess = spawn(pythonProgramName, ["paste.py", word, config.pasteInsteadOfTyping, length, skipDeleting]);
 
-    handleErrorAndClose(pasteProcess)
+        handleErrorAndClose(pasteProcess)
 
-    pasteProcess.stdout.on("data", (data) => {
-        data = data.toString();
-        if(data.includes("pasted")) pasteInProgress = false;
-    });
+        pasteProcess.stdout.on("data", (data) => {
+            data = data.toString();
+            if(data.includes("pasted")) pasteInProgress = false;
+            res();
+        });
 
-    restart();
+        restart();
+    })
 }
 
 function handleKeyRelease(key){
