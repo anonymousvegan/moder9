@@ -1,4 +1,4 @@
-import { getKeyForChar } from "./convertor";
+import { getKeyForChar } from "./convertor.js";
 
 class TrieNode {
     constructor() {
@@ -63,9 +63,9 @@ export default class Trie {
 
     getAllWordsForNode(node, arr = []) {
 
-        arr.push(...node.value)
+        if(node?.value) arr.push(...node?.value)
 
-        for (let key in node.children) {
+        for (let key in node?.children) {
             this.getAllWordsForNode(node.children[key], arr);
         }
 
@@ -87,6 +87,8 @@ export default class Trie {
         if(keys.length > 2) return;
 
         let node = this.getNode(keys)
+        if(!node) return;
+
         let wordsStartingWith = this.startsWithT9(keys, false);
 
         const filtered = wordsStartingWith.filter(word => word.wordString.length === keys.length)
@@ -102,7 +104,8 @@ export default class Trie {
 
     cache(){
 
-        this.root.cached = this.allWords;
+        const rootWordsCache = [...this.allWords].sort((a, b) => b.wordWeight - a.wordWeight).slice(0, 20);
+        this.root.cached = rootWordsCache;
 
         for(let i = 2; i <=9; i++){
 

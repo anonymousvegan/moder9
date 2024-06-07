@@ -52,7 +52,11 @@ function handleKeylogger(data){
         const filteredEvents  = events.filter(e  => e.length !== 0)
 
         filteredEvents.forEach(event => {
-            let [eventName, key ] = JSON.parse(event);
+
+            const [eventName, keycode ] = JSON.parse(event);
+            const key = convertKeyCodeToKey(keycode);
+
+            if(key === "unknown") return;
 
             if(eventName === "press") handleKeyPress(key);
             if(eventName === "release") handleKeyRelease(key);
@@ -130,7 +134,7 @@ function checkDict(key){
 
 
     const index = ["1", "/", "*", "-", "+"].findIndex(k => k === key);
-    if(index !== -1) return sendPasteSignal(availableWords[index].wordString + " ");
+    if(index !== -1) return sendPasteSignal(availableWords[index].wordString + " ", history.length + 1);
 
     if("23456789".includes(key)){
         history.push(key)
@@ -180,7 +184,6 @@ async function waitForJSONFile(wordsJsonProcess){
 function restart(){
     availableWords = []
     history = [];
-    filteredWords = [...allWords];
     pasteInProgress = false;
     currentLetterIndex = 0;
     currentLetter = "";
@@ -188,10 +191,8 @@ function restart(){
     timeout = null;
 }
 
-
 function checkWords(keys){
     availableWords = trie.startsWithT9(keys).slice(0, 5);
-
     console.log(availableWords.map(w => w.wordString));
 }
 
@@ -244,6 +245,8 @@ async function main(){
     keyloggerProcess.stdout.on('data', handleKeylogger);
 
     log("KEYLOGGER STARTED");
+    // Show first time top used words
+    checkWords("")
 }
 
 main()
