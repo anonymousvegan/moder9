@@ -68,7 +68,15 @@ function handleKeylogger(data){
     }
 }
 
+function convertKey(key){
+    if(key.length !== 1) key = convertKeyCodeToKey(key);
+    if(config.phoneLayout) key = convertKeyToPhoneLayout(key)
+
+    return key;
+}
+
 function handleKeyPress(key){
+    key = convertKey(key);
 
     if(key.includes("ctrl")) {
         ctrlPressed = true;
@@ -129,10 +137,6 @@ function checkDict(key){
         return restart()
     }
 
-    if(key.length !== 1) key = convertKeyCodeToKey(key);
-    if(config.phoneLayout) key = convertKeyToPhoneLayout(key)
-
-
     const index = ["1", "/", "*", "-", "+"].findIndex(k => k === key);
     if(index !== -1) return sendPasteSignal(availableWords[index].wordString + " ", history.length + 1);
 
@@ -147,7 +151,7 @@ function checkDict(key){
 function sendPasteSignal(word, length){
 
     if(length === 0){
-        length = letter[currentKey].length
+        length = keyMap[currentKey].length;
     }
 
     if(!length) length = word.length;
@@ -167,6 +171,7 @@ function sendPasteSignal(word, length){
 }
 
 function handleKeyRelease(key){
+    key = convertKey(key);
     if(key.includes("ctrl")) ctrlPressed = false
 }
 
@@ -246,7 +251,7 @@ async function main(){
 
     log("KEYLOGGER STARTED");
     // Show first time top used words
-    checkWords("")
+    !config.disableDict && checkWords("")
 }
 
 main()
