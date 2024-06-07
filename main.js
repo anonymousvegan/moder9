@@ -23,6 +23,7 @@ let availableWords = [];
 let ctrlPressed = false;
 let pasteInProgress = false;
 let currentLetterIndex = 0;
+let currentLetterLength = 0;
 
 function handleErrorAndClose(process){
     process.stderr.on('data', (data) => {
@@ -101,8 +102,9 @@ function typeKey(key){
     // When user press new key it is signal to paste old letter
     if(currentKey !== key && currentLetter) {
         if(timeout) clearTimeout(timeout)
-        sendPasteSignal(currentLetter, currentLetterIndex)
+        sendPasteSignal(currentLetter, currentLetterLength)
         currentLetterIndex = 0;
+        currentLetterLength = 0;
     }
 
     currentKey = key;
@@ -111,13 +113,15 @@ function typeKey(key){
     if(timeout) clearTimeout(timeout)
 
     timeout = setTimeout(() => {
-        sendPasteSignal(currentLetter, currentLetterIndex);
+        sendPasteSignal(currentLetter, currentLetterLength);
         currentLetterIndex = 0;
+        currentLetterLength = 0
         currentKey = "";
         currentLetter = ""
     }, config.repeatingDelay);
 
     currentLetterIndex = (currentLetterIndex + 1) % keyMap[currentKey].length;
+    currentLetterLength++;
 
 }
 
@@ -191,6 +195,7 @@ function restart(){
     history = [];
     pasteInProgress = false;
     currentLetterIndex = 0;
+    currentLetterLength = 0;
     currentLetter = "";
     currentKey = "";
     timeout = null;
