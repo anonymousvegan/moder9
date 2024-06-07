@@ -1,45 +1,27 @@
 import {spawn} from "child_process"
 import fs from "fs"
 import os from "os"
-
+import config from "./config";
+import { keyMap, convertKeyCodeToKey, convertKeyToPhoneLayout } from "./convertor";
 import { configDotenv } from "dotenv";
+import Trie from "./trie-class"
 
-// Variables
 configDotenv();
 
 const pythonProgramName = process.platform === "win32" ? "C:\\Python311\\python.exe" : "python3";
 
-const phoneLayout = JSON.parse(process.env["PHONE_LAYOUT"])
-const pasteInsteadOfTyping = JSON.parse(process.env["PASTE_INSTEAD_OF_TYPING"])
-const useExistingJSON = JSON.parse(process.env["USE_EXISTING_JSON"])
-const logs = JSON.parse(process.env["LOGS"])
-const disableDict = JSON.parse(process.env["DISABLE_DICT"])
-const repeatingDelay = JSON.parse(process.env["REPEATING_DELAY"])
+let trie;
+
 let timeout = null;
 let currentLetter = "";
 let currentKey = "";
 
-
 let allWords = []
-let filteredWords = []
 let history = []
-let one = "", two = "", three = "", four = "", five = "";
+let availableWords = [];
 
 let ctrlPressed = false;
 let pasteInProgress = false;
-
-const letters = {
-    "1" : " ",
-    "2" : ["a", "b", "c", "č", "ć"],
-    "3" : ["d", "e", "f", "đ"],
-    "4" : ["g", "h", "i"],
-    "5" : ["j", "k", "l"],
-    "6" : ["m", "n", "o"],
-    "7" : ["p", "r", "s", "š"],
-    "8" : ["t", "u", "v"],
-    "9" : ["z", "ž"],
-}
-
 let currentLetterIndex = 0;
 
 function handleErrorAndClose(process){
@@ -66,14 +48,8 @@ function handleKeylogger(data){
 
     try{
 
-
-        console.log("data", data);
-
         const events = data.split(os.EOL)
-
         const filteredEvents  = events.filter(e  => e.length !== 0)
-
-
 
         filteredEvents.forEach(event => {
             let [eventName, key ] = JSON.parse(event);
@@ -90,9 +66,12 @@ function handleKeylogger(data){
 
 function handleKeyPress(key){
 
-    if(key.includes("ctrl")) ctrlPressed = true
+    if(key.includes("ctrl")) {
+        ctrlPressed = true;
+        return;
+    }
 
-    if(disableDict){
+    if(config.disableDict){
         typeKey(key)
     }
     else{
@@ -115,24 +94,23 @@ function typeKey(key){
     }
 
     currentKey = key;
-    currentLetter = letters[currentKey][currentLetterIndex];
+    currentLetter = keyMap[currentKey][currentLetterIndex];
 
     if(timeout) clearTimeout(timeout)
-
-    console.log("current letter", currentLetter);
 
     timeout = setTimeout(() => {
         sendPasteSignal(currentLetter, currentLetterIndex);
         currentLetterIndex = 0;
         currentKey = "";
         currentLetter = ""
-    }, repeatingDelay);
+    }, config.repeatingDelay);
 
-    currentLetterIndex = (currentLetterIndex + 1) % letters[currentKey].length;
+    currentLetterIndex = (currentLetterIndex + 1) % keyMap[currentKey].length;
 
 }
 
 function checkDict(key){
+
     if(key.includes("backspace")){
 
         if(ctrlPressed) return restart()
@@ -147,73 +125,15 @@ function checkDict(key){
         return restart()
     }
 
-    let finalKey = ""
+    if(key.length !== 1) key = convertKeyCodeToKey(key);
+    if(config.phoneLayout) key = convertKeyToPhoneLayout(key)
 
-    switch(key){
 
-        case "/":
-            return sendPasteSignal(two);
+    const index = ["1", "/", "*", "-", "+"].findIndex(k => k === key);
+    if(index !== -1) return sendPasteSignal(availableWords[index].wordString + " ");
 
-        case "*":
-            return sendPasteSignal(three);
-
-        case "-":
-            return sendPasteSignal(four)
-
-        case "+":
-            return sendPasteSignal(five);
-
-        case "7":
-        case "<103>":
-            if(phoneLayout) return sendPasteSignal(one)
-            finalKey = phoneLayout ? "1" : "7"
-            break;
-
-        case "8":
-        case "<104>":
-            finalKey = phoneLayout ? "2" : "8"
-            break;
-
-        case "9":
-        case "<105>":
-            finalKey = phoneLayout ? "3" : "9"
-            break;
-
-        case "4":
-        case "<100>":
-            finalKey = 4;
-            break;
-
-        case "5":
-        case "<65437>":
-        case "<101>":
-            finalKey = 5;
-            break;
-
-        case "6":
-        case "<102>":
-            finalKey = 6;
-            break;
-
-        case "1":
-        case "<97>":
-            if(!phoneLayout) return sendPasteSignal(one)
-            finalKey = phoneLayout ? "7" : "1"
-            break;
-
-        case "2":
-        case "<98>":
-            finalKey = phoneLayout ? "8" : "2"
-            break;
-
-        case "3":
-        case "<99>":
-            finalKey = phoneLayout ? "9" : "3"
-            break;
-    }
-
-    if("123456789".includes(finalKey)){
-        history.push(finalKey)
+    if("23456789".includes(key)){
+        history.push(key)
     }
 
     checkWords(history.join(""))
@@ -222,16 +142,15 @@ function checkDict(key){
 
 function sendPasteSignal(word, length){
 
-
     if(length === 0){
-        length = letters[currentKey].length
+        length = letter[currentKey].length
     }
 
     if(!length) length = word.length;
 
 
     pasteInProgress = true;
-    const pasteProcess = spawn(pythonProgramName, ["paste.py", word, pasteInsteadOfTyping, length]);
+    const pasteProcess = spawn(pythonProgramName, ["paste.py", word, config.pasteInsteadOfTyping, length]);
 
     handleErrorAndClose(pasteProcess)
 
@@ -258,23 +177,8 @@ async function waitForJSONFile(wordsJsonProcess){
     })
 }
 
-function sortWordsByFrequency(words) {
-    const wordCounts = {};
-    for (const word of words) {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
-    }
-
-    const sortedWords = Object.keys(wordCounts).sort((a, b) => wordCounts[b] - wordCounts[a]);
-
-    return sortedWords;
-}
-
 function restart(){
-    one = "";
-    two = "";
-    three = "";
-    four = "";
-    five = "";
+    availableWords = []
     history = [];
     filteredWords = [...allWords];
     pasteInProgress = false;
@@ -285,42 +189,21 @@ function restart(){
 }
 
 
-function checkWords(text){
+function checkWords(keys){
+    availableWords = trie.startsWithT9(keys).slice(0, 5);
 
-    filteredWords = allWords.filter(word => word.length >= text.length);
-
-    for (let index = 0; index < text.length; index++) {
-        const number = text[index];
-        const allowedLetters = letters[number];
-
-        filteredWords = filteredWords.filter(word => {
-            return allowedLetters.some(letter => word[index] === letter);
-        });
-    }
-
-
-    filteredWords = [...filteredWords.filter(word => word.length === text.length), ...filteredWords.filter(word => word.length !== text.length)]
-    //  console.clear();
-
-    one = filteredWords.length ? filteredWords[0] + " " : " "
-    two = filteredWords.length > 1 ? filteredWords[1] + " " : " "
-    three = filteredWords.length > 2 ? filteredWords[2] + " " : " "
-    four = filteredWords.length > 3 ? filteredWords[3] + " " : " "
-    five = filteredWords.length > 4 ? filteredWords[4] + " " : " "
-
-    if(one !== " ") console.log(one, two, three, four, five)
-
+    console.log(availableWords.map(w => w.wordString));
 }
 
 function log(...args){
-    if(logs) {
+    if(config.logs) {
         console.log(...args)
     }
 }
 
 async function prepareDictResources(){
 
-    if(!useExistingJSON){
+    if(!config.useExistingJSON){
         const wordsJsonProcess = spawn(pythonProgramName, ["createDict.py"]);
         handleErrorAndClose(wordsJsonProcess)
 
@@ -339,20 +222,14 @@ async function prepareDictResources(){
     const jsonWords = fs.readFileSync("dict.json");
     allWords = JSON.parse(jsonWords).words;
 
-    log("DICT LOADED, NUMBER OF WORDS: ", allWords.length);
-
-    allWords = sortWordsByFrequency(allWords);
-
-    allWords = [...new Set(allWords)];
-
-    log("UNIQUE WORDS:", allWords.length);
+    trie = new Trie(allWords)
 }
 
 async function main(){
 
     log("HELLO! PREPARING RESOURCES");
 
-    if(!disableDict){
+    if(!config.disableDict){
         await prepareDictResources();
     }
 
@@ -368,9 +245,5 @@ async function main(){
 
     log("KEYLOGGER STARTED");
 }
-
-
-
-
 
 main()
